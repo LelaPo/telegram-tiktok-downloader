@@ -1,22 +1,36 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { config } from '../config.js';
 
 export async function downloadMedia(url) {
   const downloadDir = path.resolve('downloads');
+  await fs.mkdir(downloadDir, { recursive: true }); // Гарантируем наличие папки
+
   const tempId = `media_${Date.now()}`;
   const outputTemplate = path.join(downloadDir, `${tempId}.%(ext)s`);
 
-  // Аргументы для максимального качества видео и звука
   const args = [
     '--no-playlist',
     '--no-warnings',
-    '-f', 'bv*+ba/b',
+    '--no-simulate',      // Важно: отключает симуляцию и принудительно качает файл
+    '--dump-json',        // Возвращает метаданные в stdout
+    '-f', 'bv*+ba/b',     // Максимальное качество видео и звука
     '--merge-output-format', 'mp4',
-    '--dump-single-json', // Возвращает JSON-метаданные в stdout
     '-o', outputTemplate,
-    url,
   ];
+
+  if (config.proxyUrl) {
+    args.push('--proxy', config.proxyUrl);
+  }
+
+  if (config.cookiesFile && existsSync(config.cookiesFile)) {
+    args.push('--cookies', path.resolve(config.cookiesFile));
+  }
+
+  args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+  args.push(url);
 
   return new Promise((resolve, reject) => {
     const proc = spawn('yt-dlp', args);
@@ -38,16 +52,19 @@ export async function downloadMedia(url) {
       }
 
       try {
-        const metadata = JSON.parse(stdoutData);
+        // Берем последнюю валидную JSON строку из вывода
+        const jsonLines = stdoutData.trim().split('\n').filter(Boolean);
+        const metadata = JSON.parse(jsonLines[jsonLines.length - 1]);
+        
         const finalPath = path.join(downloadDir, `${tempId}.mp4`);
 
-        // Проверяем существование результирующего файла
+        // Ждем физического появления файла
         await fs.access(finalPath);
 
         resolve({
           filePath: finalPath,
           title: metadata.title || 'Untitled',
-          uploader: metadata.uploader || metadata.channel || 'Unknown',
+          uploader: metadata.uploader || metadata.channel || metadata.creator || 'Unknown',
           duration: metadata.duration || 0,
           resolution: metadata.resolution || (metadata.width && metadata.height ? `${metadata.width}x${metadata.height}` : 'N/A'),
           vcodec: metadata.vcodec || 'unknown',

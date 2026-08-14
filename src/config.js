@@ -5,7 +5,6 @@ if (!process.env.BOT_TOKEN) {
   process.exit(1);
 }
 
-// Преобразуем строку с ID (например, "111,222") в массив чисел
 const allowedUserIds = (process.env.ALLOWED_USER_IDS || '')
   .split(',')
   .map((id) => Number(id.trim()))
@@ -18,4 +17,6 @@ if (allowedUserIds.length === 0) {
 export const config = {
   botToken: process.env.BOT_TOKEN,
   allowedUserIds,
-};  
+  proxyUrl: process.env.PROXY_URL?.trim() || null,
+  cookiesFile: process.env.COOKIES_FILE?.trim() || null,
+};
