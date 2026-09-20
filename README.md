@@ -13,5 +13,5 @@ A private, self-hosted Telegram bot built on Python 3.12.10 that extracts high-f
 
 1. **Clone the repository**:
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/LelaPo/telegram-tiktok-downloader.git
    cd yt-audio-bot
