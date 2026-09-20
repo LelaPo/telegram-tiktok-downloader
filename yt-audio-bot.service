@@ -1,0 +1,19 @@
+[Unit]
+Description=YouTube Audio Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/yt-audio-bot
+ExecStart=/opt/yt-audio-bot/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
