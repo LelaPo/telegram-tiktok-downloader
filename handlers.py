@@ -28,6 +28,7 @@ YOUTUBE_URL_REGEX = re.compile(
 
 
 def get_editor_keyboard() -> InlineKeyboardMarkup:
+    """Return inline buttons for the interactive metadata editor."""
     return InlineKeyboardMarkup(
         [
             [
@@ -43,6 +44,7 @@ def get_editor_keyboard() -> InlineKeyboardMarkup:
 
 
 def cleanup_session(user_data: dict) -> None:
+    """Removes temporary session files and resets active state."""
     session = user_data.pop("session", None)
     if session and "session_dir" in session:
         session_dir = Path(session["session_dir"])
@@ -54,24 +56,34 @@ def cleanup_session(user_data: dict) -> None:
 
 @restricted
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Greets authenticated users."""
     await update.message.reply_text(
-        "👋 Welcome! Send me any YouTube link to download it as an MP3 (320kbps) with full tags and cover art."
+        "👋 Welcome! Send me any YouTube link to download it as a high-quality 320kbps MP3.\n\n"
+        "Tags and cover art are applied automatically. You can tweak title, artist, or cover art "
+        "using interactive buttons before finalizing."
     )
 
 
 @restricted
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Provides usage instructions."""
     await update.message.reply_text(
-        "📖 *Usage Instructions*:\n"
-        "1. Send a YouTube link.\n"
+        "📖 *Usage Instructions*:\n\n"
+        "1. Send a standard YouTube or YouTube Music link.\n"
         "2. The bot extracts the audio and sets ID3 tags.\n"
-        "3. Use the inline buttons below the audio message to adjust metadata.",
+        "3. Use the inline keyboard below the sent audio to adjust metadata:\n"
+        "   - *Edit Title*: reply with the replacement title.\n"
+        "   - *Edit Artist*: reply with the replacement artist name.\n"
+        "   - *Edit Cover*: send a new photo.\n"
+        "   - *Looks good*: finalizes file and cleans up server storage.\n"
+        "4. Use /cancel anytime to discard the current session.",
         parse_mode="Markdown",
     )
 
 
 @restricted
 async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cancels current editing session and purges temp files."""
     cleanup_session(context.user_data)
     await update.message.reply_text(
         "🧹 Active session cancelled and temporary files cleared."
@@ -82,9 +94,11 @@ async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def text_message_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
+    """Processes URLs or replacement metadata text."""
     text = update.message.text.strip()
     edit_state = context.user_data.get("edit_state")
 
+    # If the user is editing title or artist
     if edit_state in ("TITLE", "ARTIST"):
         session = context.user_data.get("session")
         if not session:
@@ -118,23 +132,30 @@ async def text_message_handler(
         await send_mp3_response(update, session)
         return
 
+    # Check for YouTube URL
     match = YOUTUBE_URL_REGEX.search(text)
     if not match:
-        await update.message.reply_text("⚠️ Please send a valid YouTube link.")
+        await update.message.reply_text(
+            "⚠️ Invalid input. Please send a valid YouTube link (e.g., https://youtu.be/...)."
+        )
         return
 
     url = match.group(0)
+
+    # Purge any existing session before starting a new download
     cleanup_session(context.user_data)
 
     status_msg = await update.message.reply_text(
-        "⏳ Downloading audio and generating tags..."
+        "⏳ Downloading audio and extracting tags..."
     )
     user_id = update.effective_user.id
     session_dir = config.DOWNLOAD_DIR / f"user_{user_id}_{int(time.time())}"
 
     try:
+        # Offload blocking yt-dlp extraction to thread pool
         result = await asyncio.to_thread(download_youtube_audio, url, session_dir)
 
+        # Initial ID3 tag embedding
         embed_tags(
             mp3_path=result.mp3_path,
             title=result.title,
@@ -161,7 +182,9 @@ async def text_message_handler(
     except Exception:
         logger.exception("Unexpected error processing %s", url)
         cleanup_session(context.user_data)
-        await status_msg.edit_text("❌ An error occurred while processing the request.")
+        await status_msg.edit_text(
+            "❌ An unexpected error occurred while processing the request."
+        )
 
 
 async def send_mp3_response(update: Update, session: dict) -> None:
@@ -242,6 +265,7 @@ async def photo_message_handler(
 async def button_callback_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
+    """Processes interactive inline keyboard button taps."""
     query = update.callback_query
     await query.answer()
 

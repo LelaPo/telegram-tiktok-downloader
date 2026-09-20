@@ -31,7 +31,7 @@ logging.basicConfig(
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
     level=logging.INFO,
 )
-# Suppress httpx request logging to prevent token leaks
+# Suppress httpx request logging to prevent token leaks in stdout
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger("yt_audio_bot")
@@ -62,7 +62,7 @@ def main() -> None:
     logger.info("Initializing bot application...")
     builder = ApplicationBuilder().token(config.TELEGRAM_BOT_TOKEN)
 
-    # Configure timeouts and optional SOCKS5/HTTP proxy
+    # Configure connection timeouts and optional SOCKS5/HTTP proxy
     if config.SOCKS5_PROXY:
         logger.info(
             "Enabling SOCKS5/HTTP proxy for Telegram API: %s", config.SOCKS5_PROXY
@@ -82,7 +82,6 @@ def main() -> None:
         )
         builder = builder.request(request).get_updates_request(get_updates_request)
     else:
-        # Standard timeouts with generous buffer for MP3 uploads
         request = HTTPXRequest(
             connect_timeout=20.0,
             read_timeout=40.0,
