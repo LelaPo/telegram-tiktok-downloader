@@ -8,6 +8,8 @@ from pathlib import Path
 from PIL import Image
 import yt_dlp
 
+import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,7 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
     """
     Downloads audio from YouTube URL, converts to MP3 (320kbps CBR) via FFmpeg,
     extracts metadata, and converts the thumbnail to a standard JPEG cover image.
-    Executed synchronously inside an asyncio thread executor.
+    Uses Android/Web player client routing to bypass YouTube 403 Forbidden errors.
     """
     session_dir.mkdir(parents=True, exist_ok=True)
     out_tmpl = str(session_dir / "%(id)s.%(ext)s")
@@ -47,7 +49,26 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        # Bypass YouTube 403 stream blocking
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"],
+                "player_skip": ["configs", "webpage"],
+            }
+        },
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
     }
+
+    # Attach optional Netscape cookies file if configured
+    if config.YOUTUBE_COOKIES_FILE and config.YOUTUBE_COOKIES_FILE.exists():
+        ydl_opts["cookiefile"] = str(config.YOUTUBE_COOKIES_FILE)
+        logger.info("Using YouTube cookie file: %s", config.YOUTUBE_COOKIES_FILE)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -73,7 +94,6 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
 
     mp3_path = session_dir / f"{video_id}.mp3"
     if not mp3_path.exists():
-        # Fallback search if yt-dlp sanitized ID unexpectedly
         mp3_files = list(session_dir.glob("*.mp3"))
         if not mp3_files:
             raise DownloadError("FFmpeg audio conversion failed: No MP3 file produced.")

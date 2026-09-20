@@ -1,7 +1,6 @@
 """
 Application entry point and startup lifecycle management.
 Targets: Python 3.12.10
-Libraries: python-telegram-bot==21.11.1, yt-dlp==2026.7.4, mutagen==1.47.0
 """
 
 import logging
@@ -24,11 +23,14 @@ from handlers import (
     text_message_handler,
 )
 
-# Configure production logging
+# Configure logging
 logging.basicConfig(
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
     level=logging.INFO,
 )
+# Mute httpx logging so bot tokens are never printed to stdout/logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger("yt_audio_bot")
 
 
