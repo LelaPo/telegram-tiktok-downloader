@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Load variables from .env file
 load_dotenv()
 
 # Telegram Bot Token
@@ -25,13 +26,13 @@ if not ALLOWED_USER_IDS:
         "CRITICAL: ALLOWED_USER_IDS is empty. Provide at least one numeric Telegram user ID."
     )
 
-# Temporary storage directory
+# Temporary Storage Directory
 DOWNLOAD_DIR = Path(os.getenv("DOWNLOAD_DIR", "/tmp/yt_audio_bot")).resolve()
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-# Optional YouTube cookies file path
+# Optional Netscape cookies file path
 cookies_path = os.getenv("YOUTUBE_COOKIES_FILE")
 YOUTUBE_COOKIES_FILE = Path(cookies_path).resolve() if cookies_path else None
 
-# Proxy for Telegram API (SOCKS5 or HTTP)
+# Optional Proxy for Telegram API (SOCKS5 / HTTP)
 SOCKS5_PROXY = os.getenv("SOCKS5_PROXY") or os.getenv("TELEGRAM_PROXY_URL") or None

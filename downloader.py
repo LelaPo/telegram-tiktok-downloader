@@ -59,12 +59,16 @@ def process_image(img: Image.Image, session_dir: Path) -> tuple[Path, Path]:
 
 
 def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
-    """Downloads audio, extracts metadata, and generates JPEG covers."""
+    """
+    Downloads audio from YouTube URL, converts to MP3 (320kbps CBR) via FFmpeg,
+    extracts metadata, and generates covers.
+    """
     session_dir.mkdir(parents=True, exist_ok=True)
     out_tmpl = str(session_dir / "%(id)s.%(ext)s")
 
     ydl_opts = {
-        "format": "bestaudio/best",
+        # Select pure lightweight audio streams (m4a/opus)
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": out_tmpl,
         "postprocessors": [
             {
@@ -76,10 +80,13 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        # Multi-threaded chunk downloading
+        "concurrent_fragment_downloads": 4,
+        "buffersize": 1024 * 1024,
+        # Client rotation to bypass 403 Forbidden without disabling nsig throttling solver
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "web"],
-                "player_skip": ["configs", "webpage"],
             }
         },
         "http_headers": {
@@ -139,7 +146,9 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
                 "Generated cover (%s) and TG thumbnail (%s)", cover_path, thumb_path
             )
         except Exception as exc:
-            logger.warning("Could not process thumbnail: %s", exc)
+            logger.warning(
+                "Could not process thumbnail from %s: %s", thumbnail_url, exc
+            )
 
     return MediaResult(
         mp3_path=mp3_path,

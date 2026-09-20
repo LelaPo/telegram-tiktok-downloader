@@ -13,7 +13,11 @@ def embed_tags(
     artist: str | None = None,
     cover_path: Path | None = None,
 ) -> None:
-    """Embed ID3v2.3 tags (TIT2, TPE1, APIC) into MP3."""
+    """
+    Embed ID3v2.3 tags (TIT2, TPE1, APIC) into MP3.
+    Uses ISO-8859-1 (encoding=0) for APIC to ensure maximum compatibility
+    with Telegram desktop/mobile and offline car audio players.
+    """
     if not mp3_path.exists():
         raise FileNotFoundError(f"Target MP3 does not exist: {mp3_path}")
 

@@ -1,17 +1,16 @@
 [Unit]
-Description=YouTube Audio Telegram Bot
+Description=YouTube to MP3 Telegram Bot
 After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
+User=root
 WorkingDirectory=/opt/yt-audio-bot
-ExecStart=/opt/yt-audio-bot/venv/bin/python main.py
+ExecStart=/opt/yt-audio-bot/venv/bin/python3 /opt/yt-audio-bot/main.py
 Restart=always
 RestartSec=5
 
-# Security hardening
+# Sandboxing
 NoNewPrivileges=true
 PrivateTmp=true
 
