@@ -25,14 +25,41 @@ class MediaResult:
     title: str
     artist: str
     cover_path: Path | None
+    thumb_path: Path | None
+
+
+def process_image(img: Image.Image, session_dir: Path) -> tuple[Path, Path]:
+    """
+    Crops image to a 1:1 square and creates:
+    1. cover.jpg (800x800) for ID3 APIC tag embedding.
+    2. thumb.jpg (320x320, <200KB) strictly for Telegram's message preview.
+    """
+    img = img.convert("RGB")
+    width, height = img.size
+    min_dim = min(width, height)
+
+    # Center crop to 1:1 square
+    left = (width - min_dim) // 2
+    top = (height - min_dim) // 2
+    img_square = img.crop((left, top, left + min_dim, top + min_dim))
+
+    # 1. Full cover for MP3 ID3 tag (800x800 max)
+    cover_img = img_square.copy()
+    if min_dim > 800:
+        cover_img = cover_img.resize((800, 800), Image.Resampling.LANCZOS)
+    cover_path = session_dir / "cover.jpg"
+    cover_img.save(cover_path, format="JPEG", quality=90)
+
+    # 2. Telegram chat preview thumbnail (strictly <= 320x320)
+    thumb_img = img_square.resize((320, 320), Image.Resampling.LANCZOS)
+    thumb_path = session_dir / "thumb.jpg"
+    thumb_img.save(thumb_path, format="JPEG", quality=85)
+
+    return cover_path, thumb_path
 
 
 def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
-    """
-    Downloads audio from YouTube URL, converts to MP3 (320kbps CBR) via FFmpeg,
-    extracts metadata, and converts the thumbnail to a standard JPEG cover image.
-    Uses Android/Web player client routing to bypass YouTube 403 Forbidden errors.
-    """
+    """Downloads audio, extracts metadata, and generates JPEG covers."""
     session_dir.mkdir(parents=True, exist_ok=True)
     out_tmpl = str(session_dir / "%(id)s.%(ext)s")
 
@@ -49,7 +76,6 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        # Bypass YouTube 403 stream blocking
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "web"],
@@ -65,10 +91,8 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
         },
     }
 
-    # Attach optional Netscape cookies file if configured
     if config.YOUTUBE_COOKIES_FILE and config.YOUTUBE_COOKIES_FILE.exists():
         ydl_opts["cookiefile"] = str(config.YOUTUBE_COOKIES_FILE)
-        logger.info("Using YouTube cookie file: %s", config.YOUTUBE_COOKIES_FILE)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -99,7 +123,7 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
             raise DownloadError("FFmpeg audio conversion failed: No MP3 file produced.")
         mp3_path = mp3_files[0]
 
-    cover_path = None
+    cover_path, thumb_path = None, None
     if thumbnail_url:
         try:
             req = urllib.request.Request(
@@ -109,19 +133,18 @@ def download_youtube_audio(url: str, session_dir: Path) -> MediaResult:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 thumb_bytes = resp.read()
 
-            cover_path = session_dir / "cover.jpg"
-            img = Image.open(io.BytesIO(thumb_bytes)).convert("RGB")
-            img.save(cover_path, format="JPEG", quality=95)
-            logger.info("Saved and converted thumbnail to JPEG: %s", cover_path)
-        except Exception as exc:
-            logger.warning(
-                "Could not download/convert thumbnail from %s: %s", thumbnail_url, exc
+            raw_image = Image.open(io.BytesIO(thumb_bytes))
+            cover_path, thumb_path = process_image(raw_image, session_dir)
+            logger.info(
+                "Generated cover (%s) and TG thumbnail (%s)", cover_path, thumb_path
             )
-            cover_path = None
+        except Exception as exc:
+            logger.warning("Could not process thumbnail: %s", exc)
 
     return MediaResult(
         mp3_path=mp3_path,
         title=raw_title,
         artist=raw_artist,
         cover_path=cover_path,
+        thumb_path=thumb_path,
     )

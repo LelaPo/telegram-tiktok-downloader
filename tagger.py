@@ -13,10 +13,7 @@ def embed_tags(
     artist: str | None = None,
     cover_path: Path | None = None,
 ) -> None:
-    """
-    Embed or overwrite ID3 tags (TIT2, TPE1, APIC) on an MP3 file using ID3v2.3.
-    ID3v2.3 provides the widest compatibility across car stereos, mobile players, and Telegram.
-    """
+    """Embed ID3v2.3 tags (TIT2, TPE1, APIC) into MP3."""
     if not mp3_path.exists():
         raise FileNotFoundError(f"Target MP3 does not exist: {mp3_path}")
 
@@ -25,7 +22,6 @@ def embed_tags(
     except ID3NoHeaderError:
         tags = ID3()
 
-    # UTF-8 text encoding (encoding=3)
     if title is not None:
         tags.delall("TIT2")
         tags.add(TIT2(encoding=3, text=title.strip()))
@@ -39,17 +35,12 @@ def embed_tags(
         with open(cover_path, "rb") as img_file:
             cover_data = img_file.read()
 
-        mime = (
-            "image/jpeg"
-            if cover_path.suffix.lower() in [".jpg", ".jpeg"]
-            else "image/png"
-        )
         tags.add(
             APIC(
-                encoding=3,
-                mime=mime,
-                type=3,  # Cover (front)
-                desc="Cover",
+                encoding=0,  # ISO-8859-1 for widest player compatibility
+                mime="image/jpeg",
+                type=3,  # Front cover
+                desc="",
                 data=cover_data,
             )
         )
