@@ -5,13 +5,16 @@ Targets: Python 3.12.10
 
 import logging
 import shutil
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
     CommandHandler,
+    ContextTypes,
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 import config
 from handlers import (
@@ -23,12 +26,12 @@ from handlers import (
     text_message_handler,
 )
 
-# Configure logging
+# Logging configuration
 logging.basicConfig(
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
     level=logging.INFO,
 )
-# Mute httpx logging so bot tokens are never printed to stdout/logs
+# Suppress httpx request logging to prevent token leaks
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger("yt_audio_bot")
@@ -45,12 +48,53 @@ def cleanup_stale_temp_files():
         )
 
 
+async def global_error_handler(
+    update: object, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Log exceptions caused by updates without terminating the bot."""
+    logger.error("Exception while handling update %s:", update, exc_info=context.error)
+
+
 def main() -> None:
     """Builds and starts the Telegram bot."""
     cleanup_stale_temp_files()
 
     logger.info("Initializing bot application...")
-    app = ApplicationBuilder().token(config.TELEGRAM_BOT_TOKEN).build()
+    builder = ApplicationBuilder().token(config.TELEGRAM_BOT_TOKEN)
+
+    # Configure timeouts and optional SOCKS5/HTTP proxy
+    if config.SOCKS5_PROXY:
+        logger.info(
+            "Enabling SOCKS5/HTTP proxy for Telegram API: %s", config.SOCKS5_PROXY
+        )
+        request = HTTPXRequest(
+            proxy=config.SOCKS5_PROXY,
+            connect_timeout=30.0,
+            read_timeout=60.0,
+            write_timeout=60.0,
+            media_write_timeout=180.0,
+        )
+        get_updates_request = HTTPXRequest(
+            proxy=config.SOCKS5_PROXY,
+            connect_timeout=30.0,
+            read_timeout=60.0,
+            write_timeout=60.0,
+        )
+        builder = builder.request(request).get_updates_request(get_updates_request)
+    else:
+        # Standard timeouts with generous buffer for MP3 uploads
+        request = HTTPXRequest(
+            connect_timeout=20.0,
+            read_timeout=40.0,
+            write_timeout=40.0,
+            media_write_timeout=180.0,
+        )
+        builder = builder.request(request)
+
+    app = builder.build()
+
+    # Register error handler
+    app.add_error_handler(global_error_handler)
 
     # Commands
     app.add_handler(CommandHandler("start", start_handler))
